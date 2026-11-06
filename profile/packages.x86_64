@@ -1,0 +1,119 @@
+# ---------------------------------------------------------------------------
+# AquaOS · paquetes de la ISO "live"
+# Incluye todo lo del sistema instalado + herramientas de instalación/rescate.
+# Mantener sincronizado con packages-desktop.txt (scripts/lint.sh lo comprueba).
+# ---------------------------------------------------------------------------
+
+# --- base -------------------------------------------------------------------
+base
+linux
+linux-firmware
+linux-headers
+mkinitcpio
+intel-ucode
+amd-ucode
+sudo
+nano
+vim
+less
+man-db
+man-pages
+bash-completion
+rsync
+curl
+wget
+git
+unzip
+zip
+tar
+htop
+fastfetch
+
+# --- red --------------------------------------------------------------------
+networkmanager
+wpa_supplicant
+bluez
+bluez-utils
+
+# --- audio / vídeo (PipeWire) ----------------------------------------------
+pipewire
+pipewire-alsa
+pipewire-pulse
+pipewire-jack
+wireplumber
+alsa-utils
+alsa-ucm-conf
+sof-firmware
+mesa
+vulkan-intel
+vulkan-radeon
+vulkan-swrast
+libva-mesa-driver
+mesa-utils
+xorg-xwayland
+
+# --- escritorio (KDE Plasma 6) ---------------------------------------------
+plasma-meta
+plasma-workspace-wallpapers
+sddm
+sddm-kcm
+kwallet
+kwallet-pam
+kwalletmanager
+xdg-utils
+xdg-user-dirs
+xdg-desktop-portal
+xdg-desktop-portal-kde
+xdg-desktop-portal-gtk
+breeze
+breeze-gtk
+gtk-update-icon-cache
+qt6-imageformats
+kio-extras
+kimageformats
+ffmpegthumbs
+kdegraphics-thumbnailers
+appmenu-gtk-module
+
+# --- aplicaciones -----------------------------------------------------------
+dolphin
+konsole
+kate
+gwenview
+okular
+ark
+kcalc
+spectacle
+elisa
+haruna
+partitionmanager
+discover
+packagekit-qt6
+firefox
+thunderbird
+firefox-i18n-es-es
+thunderbird-i18n-es-es
+
+# --- tipografía / idioma ----------------------------------------------------
+inter-font
+ttf-jetbrains-mono
+ttf-liberation
+noto-fonts
+noto-fonts-emoji
+hunspell-es_any
+
+# --- disco / arranque -------------------------------------------------------
+grub
+efibootmgr
+dosfstools
+mtools
+gptfdisk
+parted
+
+# --- solo live --------------------------------------------------------------
+mkinitcpio-archiso
+arch-install-scripts
+squashfs-tools
+syslinux
+qemu-guest-agent
+virtualbox-guest-utils-nox

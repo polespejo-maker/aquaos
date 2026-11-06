@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  AquaOS · preparación del sistema (se ejecuta UNA vez, como root, antes del
+#  login gráfico). Sirve tanto en el ISO "live" como en una instalación real.
+#
+#  - crea el usuario "aqua" (solo la primera vez)
+#  - elige el mejor tema disponible (WhiteSur si se compiló, si no Breeze)
+#  - deja listos los ajustes que Plasma lee al iniciar sesión
+# ============================================================================
+set -Eeuo pipefail
+
+USUARIO="${AQUAOS_USER:-aqua}"
+MARCA="/var/lib/aquaos/firstboot.done"
+REGISTRO="/var/log/aquaos-firstboot.log"
+
+exec >>"${REGISTRO}" 2>&1
+echo "=== aquaos-firstboot $(date -Is) ==="
+
+if [[ -e "${MARCA}" ]]; then
+    echo "ya ejecutado; nada que hacer"
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# 1. Usuario
+# ---------------------------------------------------------------------------
+if ! id "${USUARIO}" >/dev/null 2>&1; then
+    echo "creando usuario ${USUARIO}"
+
+    # Solo añadimos grupos que existan de verdad en este sistema
+    grupos=()
+    for g in wheel video audio render input power storage optical network; do
+        getent group "${g}" >/dev/null 2>&1 && grupos+=("${g}")
+    done
+    lista_grupos="$(IFS=,; echo "${grupos[*]}")"
+
+    args=(-m -c "AquaOS" -s /bin/bash)
+    if ! getent passwd 1000 >/dev/null 2>&1; then
+        args+=(-u 1000)
+    fi
+    [[ -n "${lista_grupos}" ]] && args+=(-G "${lista_grupos}")
+
+    useradd "${args[@]}" "${USUARIO}"
+    # Contraseña por defecto del entorno live: "aqua" (se cambia al instalar)
+    printf '%s:aqua\n' "${USUARIO}" | chpasswd
+fi
+
+install -d -m 0755 /etc/sudoers.d
+if [[ -d /run/archiso ]]; then
+    # Entorno live: comodidad, sin contraseña para sudo.
+    printf '%s ALL=(ALL) NOPASSWD: ALL\n' "${USUARIO}" > /etc/sudoers.d/10-aquaos
+else
+    # Sistema instalado: sudo normal, con contraseña.
+    printf '%s ALL=(ALL:ALL) ALL\n' "${USUARIO}" > /etc/sudoers.d/10-aquaos
+fi
+chmod 0440 /etc/sudoers.d/10-aquaos
+
+CASA="/home/${USUARIO}"
+
+# Carpetas de usuario tipo macOS (Escritorio, Documentos, Descargas...)
+if [[ ! -d "${CASA}/Escritorio" && ! -d "${CASA}/Desktop" ]]; then
+    runuser -u "${USUARIO}" -- env HOME="${CASA}" xdg-user-dirs-update >/dev/null 2>&1 || true
+fi
+
+# ---------------------------------------------------------------------------
+# 2. Detección de temas instalados
+#    El build puede o no haber integrado los temas de AUR (WhiteSur).
+#    Aquí elegimos lo mejor que haya sin romper nada si falta.
+# ---------------------------------------------------------------------------
+escoger() { # escoger <nombre1> <nombre2> ...  -> imprime el primero instalado
+    local n
+    for n in "$@"; do
+        if [[ -d "/usr/share/$TIPO/${n}" ]]; then
+            printf '%s' "${n}"
+            return 0
+        fi
+    done
+    return 0
+}
+
+TIPO=icons
+ICONOS="$(escoger WhiteSur-light WhiteSur WhiteSur-dark)"
+[[ -z "${ICONOS}" ]] && ICONOS="breeze"
+
+TIPO=icons
+CURSORES="$(escoger WhiteSur-cursors)"
+[[ -z "${CURSORES}" ]] && CURSORES="breeze_cursors"
+
+TIPO=themes
+GTK="$(escoger WhiteSur-Light WhiteSur-Dark WhiteSur)"
+[[ -z "${GTK}" ]] && GTK="Breeze"
+
+TIPO=aurorae/themes
+DECORACION="$(escoger WhiteSur)"
+[[ -z "${DECORACION}" ]] && DECORACION="Breeze"
+
+echo "tema: iconos=${ICONOS} cursores=${CURSORES} gtk=${GTK} decoracion=${DECORACION}"
+
+# ---------------------------------------------------------------------------
+# 3. Ajustes de KDE del usuario
+# ---------------------------------------------------------------------------
+install -d -m 0755 "${CASA}/.config/gtk-3.0" "${CASA}/.config/gtk-4.0"
+
+kwrite() { # kwrite <archivo> <grupo> <clave> <valor>
+    kwriteconfig6 --file "$1" --group "$2" --key "$3" "$4"
+}
+
+KDE="${CASA}/.config/kdeglobals"
+kwrite "${KDE}" Icons Theme "${ICONOS}"
+kwrite "${KDE}" General ColorScheme "BreezeLight"
+kwrite "${KDE}" General AccentColor "10,132,255"
+
+kwrite "${CASA}/.config/kcminputrc" Mouse cursorTheme "${CURSORES}"
+kwrite "${CASA}/.config/kcminputrc" Mouse cursorSize "24"
+# Trackpad como en macOS (scroll natural y toque para hacer clic)
+kwrite "${CASA}/.config/kcminputrc" Touchpad NaturalScroll "true"
+kwrite "${CASA}/.config/kcminputrc" Touchpad TapToClick "true"
+
+# Distribución de teclado española en la sesión Plasma (X11 y Wayland)
+kwrite "${CASA}/.config/kxkbrc" Layout LayoutList "es"
+kwrite "${CASA}/.config/kxkbrc" Layout Use "true"
+
+# Atajo de terminal (Konsole) además de los que ya trae Plasma
+kwriteconfig6 --file "${CASA}/.config/kglobalshortcutsrc" \
+    --group services --group org.kde.konsole.desktop \
+    --key _launch "Ctrl+Alt+T,none,Terminal"
+
+# Decoración de ventanas: botones a la izquierda (cerrar, minimizar, maximizar)
+KWIN="${CASA}/.config/kwinrc"
+if [[ "${DECORACION}" == "Breeze" ]]; then
+    kwrite "${KWIN}" org.kde.kdecoration2 library "org.kde.breeze"
+else
+    kwrite "${KWIN}" org.kde.kdecoration2 library "org.kde.kwin.aurorae"
+    kwrite "${KWIN}" org.kde.kdecoration2 theme "${DECORACION}"
+fi
+kwrite "${KWIN}" org.kde.kdecoration2 ButtonsOnLeft "XIA"
+kwrite "${KWIN}" org.kde.kdecoration2 ButtonsOnRight ""
+
+# GTK (Firefox, Thunderbird y apps de terceros)
+for v in 3.0 4.0; do
+    cat > "${CASA}/.config/gtk-${v}/settings.ini" <<EOF
+[Settings]
+gtk-theme-name=${GTK}
+gtk-icon-theme-name=${ICONOS}
+gtk-cursor-theme-name=${CURSORES}
+gtk-font-name=Inter 10
+gtk-application-prefer-dark-theme=false
+EOF
+done
+
+# Variables de sesión comunes para apps Qt/GTK
+install -d -m 0755 /etc/environment.d
+cat > /etc/environment.d/50-aquaos.conf <<EOF
+XCURSOR_THEME=${CURSORES}
+XCURSOR_SIZE=24
+QT_QPA_PLATFORMTHEME=kde
+GTK_MODULES=appmenu-gtk-module
+XKB_DEFAULT_LAYOUT=es
+EOF
+
+chown -R "${USUARIO}:${USUARIO}" "${CASA}/.config"
+
+# ---------------------------------------------------------------------------
+# 4. Cachés de iconos (los temas de AUR se copiaron a mano, sin pacman)
+# ---------------------------------------------------------------------------
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+for d in /usr/share/icons/*/; do
+    if [[ -f "${d}/index.theme" ]]; then
+        gtk-update-icon-cache -f -t "${d}" >/dev/null 2>&1 || true
+    fi
+done
+
+systemctl enable --now systemd-timesyncd >/dev/null 2>&1 || true
+
+install -d -m 0755 /var/lib/aquaos
+date -Is > "${MARCA}"
+echo "primer arranque completado"

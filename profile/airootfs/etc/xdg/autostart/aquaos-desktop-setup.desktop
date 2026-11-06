@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=AquaOS Desktop Setup
+Comment=Aplica la disposición estilo macOS (barra superior + dock)
+Exec=/usr/local/bin/aquaos-desktop-setup
+Terminal=false
+NoDisplay=true
+X-KDE-autostart-after=panel
+X-KDE-autostart-phase=2
+OnlyShowIn=KDE;

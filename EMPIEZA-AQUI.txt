@@ -1,0 +1,112 @@
+EMPIEZA AQUI  ·  AquaOS sin permisos de administrador
+=====================================================
+
+Que vas a conseguir
+-------------------
+Ver AquaOS (Linux con escritorio estilo macOS) en una ventana de tu PC,
+sin instalar nada, sin tocar Windows y sin ser administrador.
+
+  - Windows sigue siendo tu sistema. Reinicias y arranca Windows.
+  - AquaOS corre dentro de una maquina virtual (VirtualBox, ya lo tienes).
+  - La ISO se compila gratis en GitHub, en la nube, no en tu PC.
+
+Lo unico que necesitas: un navegador y una cuenta de GitHub (gratis).
+
+
+PASO 1 · Crear la cuenta (si no tienes)
+---------------------------------------
+  https://github.com/signup
+
+
+PASO 2 · Crear un repositorio vacio
+-----------------------------------
+  1. Entra en  https://github.com/new
+  2. Repository name:  aquaos
+  3. Marca  Public
+  4. NO marques "Add a README file"
+  5. Create repository
+
+Te saldra una pagina con instrucciones. Ignoralas.
+
+
+PASO 3 · Subir el proyecto
+--------------------------
+  1. En esa pagina, pulsa el enlace "uploading an existing file".
+  2. Abre en el Explorador la carpeta:
+        C:\Users\PolEspejoEspinazo\Desktop\opencode\aquaos
+  3. Pulsa Ctrl+A (selecciona todo) y arrastra TODO a la zona de subida
+     del navegador.
+     Son 48 archivos, ~12 MB. Espera a que termine de subirlos todos.
+  4. Abajo, pulsa "Commit changes".
+
+  Comprueba que en el repositorio aparece la carpeta .github (con
+  workflows/build-iso.yml dentro). Si no aparece, repite el paso 3
+  asegurandote de que el Explorador muestra los archivos ocultos
+  (Vista > Mostrar > Elementos ocultos).
+
+
+PASO 4 · Lanzar la compilacion
+------------------------------
+  El simple hecho de subir el proyecto ya lanza la compilacion
+  automaticamente. Para verla:
+
+  1. Pestana "Actions" del repositorio.
+  2. Si es la primera vez, pulsa "I understand my workflows, go ahead".
+  3. Veras "Build ISO" en marcha (circulo amarillo).
+     Si no arranco solo:  Build ISO > Run workflow > Run workflow.
+
+  Tarda entre 30 y 60 minutos. Puedes cerrar el navegador.
+  Cuando termine, el circulo estara en verde.
+
+
+PASO 5 · Descargar la ISO
+--------------------------
+  1. Actions > Build ISO > la ejecucion terminada (verde).
+  2. Abajo, en "Artifacts":  pulsa  aquaos-iso  (se descarga un .zip).
+  3. Descomprime el .zip DENTRO de esta carpeta:
+        ...\Desktop\opencode\aquaos\out\
+     (si no existe la carpeta out, creala)
+
+  Dentro de out\ deben quedar varios archivos:
+        aquaos.iso.part-00
+        aquaos.iso.part-01
+        aquaos.iso.part-02
+        SHA256SUMS
+
+
+PASO 6 · Abrirlo
+----------------
+  Doble clic en:   Abrir AquaOS.cmd
+  (esta en esta misma carpeta)
+
+  La primera vez:
+    - une los trozos en una ISO y comprueba su SHA256,
+    - crea la maquina virtual,
+    - arranca AquaOS en una ventana.
+
+  Usuario: aqua      Contrasena: aqua
+
+
+Como salir
+----------
+  Menu de AquaOS > Apagar. Luego cierra la ventana de VirtualBox.
+  Ya estas en Windows. Tu PC no ha cambiado nada.
+
+  Si reinicias el PC: arranca Windows, como siempre.
+
+
+Si algo falla
+-------------
+  - La compilacion en GitHub sale en rojo:
+      abre la ejecucion, pulsa en el paso rojo y copia el mensaje.
+      Con ese texto se puede arreglar.
+
+  - "no hay ninguna ISO": revisa que los .part-XX esten en out\.
+
+  - "VirtualBox no pudo arrancar la VM":
+      VBoxManage modifyvm AquaOS --accelerate3d off
+
+  - El SHA256 no coincide: borra out\ y vuelve a descargar el artifact.
+
+  - Va lento: es normal si Hyper-V esta activo; VirtualBox usa un modo
+    de compatibilidad mas lento.

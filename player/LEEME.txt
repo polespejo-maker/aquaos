@@ -1,0 +1,76 @@
+AquaOS · abrirlo en una ventana
+===============================
+
+Que hace esto
+-------------
+Doble clic en  AquaOS.cmd  y se abre AquaOS (Linux con escritorio estilo macOS)
+dentro de una maquina virtual.
+
+NO toca tu Windows:
+  - no modifica el disco
+  - no cambia el arranque (sigue arrancando Windows al encender el PC)
+  - no instala nada en el sistema
+Apagas la ventana y ya estas en Windows.
+
+Requisitos
+----------
+  - VirtualBox instalado (ya lo tienes: 7.0.6).
+  - La ISO de AquaOS, que hay que compilar UNA vez.
+
+Antes del primer uso: compilar la ISO
+-------------------------------------
+La ISO no viene hecha: es el resultado de construir la distro. Opciones:
+
+  A) Docker Desktop (Windows)
+       .\scripts\build-in-docker.ps1
+
+  B) GitHub Actions (sin instalar nada)
+       subir el repo a GitHub y lanzar "Actions > Build ISO > Run workflow"
+
+  C) En una VM con Arch Linux
+       sudo ./build.sh
+
+La ISO acaba en:  ..\out\aquaos-0.1.YYYYMMDD-x86_64.iso
+
+Uso
+---
+  AquaOS.cmd                          abre la ISO en modo live
+  AquaOS.cmd -DesdeDisco              arranca el AquaOS ya instalado en la VM
+  AquaOS.cmd -Iso "D:\otra.iso"       usa una ISO concreta
+  AquaOS.cmd -Recrear                 borra la VM y la crea de cero
+  AquaOS.cmd -Efi                     crea la VM en modo UEFI (por defecto BIOS)
+
+Dentro de AquaOS
+----------------
+  Usuario:    aqua
+  Contrasena: aqua
+
+  Si quieres instalar AquaOS "de verdad" para que persista:
+    1. Dentro de la sesion live, abre una terminal.
+    2. sudo aquaos-install
+    3. Elige el disco de 30 GB de la maquina virtual (el unico que vera).
+    4. Al terminar, cierra la VM y abre con:  AquaOS.cmd -DesdeDisco
+
+  Eso instala dentro del archivo .vdi de la VM. Windows sigue sin tocarse.
+
+Donde se guarda todo
+--------------------
+  player\vm\AquaOS.vdi    disco de la maquina virtual (crece hasta 30 GB)
+  ..\out\*.iso            la ISO
+
+Para borrar todo: borra la carpeta player\vm y la VM desde VirtualBox.
+
+Problemas tipicos
+-----------------
+  "VirtualBox no pudo arrancar la VM"
+      Hyper-V activo + aceleracion 3D. Prueba:
+        VBoxManage modifyvm AquaOS --accelerate3d off
+
+  Va lento
+      Es normal con Hyper-V activo (VirtualBox usa el modo de compatibilidad).
+      Con 4 GB de RAM y 4 CPU se puede usar; para ir fino, desactiva Hyper-V
+      o usa un PC sin el.
+
+  El teclado escribe en ingles
+      Dentro de AquaOS el teclado ya viene en espanol; si no, Ajustes del
+      Sistema > Teclado > Distribucion > Espanol.

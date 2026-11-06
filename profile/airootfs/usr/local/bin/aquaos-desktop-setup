@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  AquaOS · aplica la disposición macOS (barra superior + dock) al escritorio
+#
+#  Se lanza como autostart de la sesión Plasma (ver
+#  /etc/xdg/autostart/aquaos-desktop-setup.desktop).
+# ============================================================================
+set -uo pipefail
+
+LAYOUT="/usr/share/aquaos/plasma/layout.js"
+MARCA="${XDG_CONFIG_HOME:-$HOME/.config}/aquaos/desktop-setup.done"
+REGISTRO="${XDG_CACHE_HOME:-$HOME/.cache}/aquaos-desktop-setup.log"
+
+mkdir -p "$(dirname "${REGISTRO}")"
+exec >>"${REGISTRO}" 2>&1
+echo "=== aquaos-desktop-setup $(date -Is) ==="
+
+if [[ -e "${MARCA}" ]]; then
+    echo "ya aplicado"
+    exit 0
+fi
+
+if [[ ! -f "${LAYOUT}" ]]; then
+    echo "falta ${LAYOUT}"
+    exit 1
+fi
+
+# Esperar a que plasmashell exponga su API de scripting (máx. ~30 s)
+for _ in $(seq 1 60); do
+    if gdbus introspect --session \
+        --dest org.kde.plasmashell \
+        --object-path /PlasmaShell >/dev/null 2>&1; then
+        break
+    fi
+    sleep 0.5
+done
+
+# Un pequeño respiro para que el panel por defecto termine de aparecer
+sleep 2
+
+CODIGO="$(cat "${LAYOUT}")"
+if ! gdbus call --session \
+        --dest org.kde.plasmashell \
+        --object-path /PlasmaShell \
+        --method org.kde.PlasmaShell.evaluateScript "${CODIGO}"; then
+    echo "evaluateScript falló"
+    exit 1
+fi
+
+# Navegador y correo por defecto (equivalente a Safari/Mail)
+xdg-settings set default-web-browser firefox.desktop >/dev/null 2>&1 || true
+xdg-mime default thunderbird.desktop x-scheme-handler/mailto >/dev/null 2>&1 || true
+
+# Notificar a KDE de que los iconos/cursores configurados por firstboot cambien
+qdbus6 org.kde.KGlobalSettings /KGlobalSettings org.kde.KGlobalSettings.notifyChange 2 0 >/dev/null 2>&1 || true
+
+mkdir -p "$(dirname "${MARCA}")"
+date -Is > "${MARCA}"
+echo "diseño aplicado"

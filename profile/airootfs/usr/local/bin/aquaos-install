@@ -1,0 +1,304 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  AquaOS · instalador en disco
+#
+#  Uso:  sudo aquaos-install [opciones]
+#
+#    --disk /dev/sdX     disco destino (si no se indica, se pregunta)
+#    --user NOMBRE       nombre de usuario (por defecto: aqua)
+#    --bios              instalar para arranque BIOS/legacy (por defecto UEFI)
+#    --no-swap           no crear archivo de intercambio
+#    --yes               no pedir confirmación final (¡peligroso!)
+#    --offline           instalar desde los paquetes de la propia ISO
+#    -h, --help          esta ayuda
+#
+#  El instalador BORRA el disco elegido por completo.
+# ============================================================================
+set -Eeuo pipefail
+
+DISCO=""
+USUARIO="aqua"
+MODO_UEFI=1
+CREAR_SWAP=1
+SALTAR_CONFIRMACION=0
+OFFLINE=0
+PUNTO_MONTAJE="/mnt"
+REGISTRO="/var/log/aquaos-install.log"
+
+ROJO=$'\033[31m'; VERDE=$'\033[32m'; AMARILLO=$'\033[33m'
+AZUL=$'\033[34m'; NEGRITA=$'\033[1m'; RESET=$'\033[0m'
+
+paso()  { printf '\n%s==>%s %s\n' "${AZUL}${NEGRITA}" "${RESET}" "$*"; }
+ok()    { printf '%s  ok%s %s\n' "${VERDE}" "${RESET}" "$*"; }
+aviso() { printf '%s aviso%s %s\n' "${AMARILLO}" "${RESET}" "$*"; }
+morir() { printf '%s error%s %s\n' "${ROJO}" "${RESET}" "$*" >&2; exit 1; }
+
+uso() { sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+while (( $# > 0 )); do
+    case "$1" in
+        --disk)    DISCO="${2:?falta la ruta del disco}"; shift 2 ;;
+        --user)    USUARIO="${2:?falta el nombre de usuario}"; shift 2 ;;
+        --bios)    MODO_UEFI=0; shift ;;
+        --no-swap) CREAR_SWAP=0; shift ;;
+        --yes)     SALTAR_CONFIRMACION=1; shift ;;
+        --offline) OFFLINE=1; shift ;;
+        -h|--help) uso; exit 0 ;;
+        *) morir "opción desconocida: $1 (usa --help)" ;;
+    esac
+done
+
+(( EUID == 0 )) || morir "hay que ejecutar como root:  sudo aquaos-install"
+
+# El nombre se usa en useradd, en /etc/hosts y en la ruta /home/<usuario>.
+[[ "${USUARIO}" =~ ^[a-z_][a-z0-9_-]*$ ]] \
+    || morir "nombre de usuario inválido: ${USUARIO} (minúsculas, sin espacios ni ':')"
+[[ "${USUARIO}" != "root" ]] || morir "no se puede usar root como usuario del escritorio"
+
+exec > >(tee -a "${REGISTRO}") 2>&1
+echo "=== aquaos-install $(date -Is) ==="
+
+PRIVADO=0
+limpiar() {
+    local codigo=$?
+    if (( PRIVADO )); then
+        aviso "desmontando ${PUNTO_MONTAJE}..."
+        swapoff "${PUNTO_MONTAJE}/swapfile" 2>/dev/null || true
+        umount -R "${PUNTO_MONTAJE}" 2>/dev/null || true
+    fi
+    if (( codigo != 0 )); then
+        printf '\n%sLa instalación ha fallado.%s Revisa %s\n' "${ROJO}" "${RESET}" "${REGISTRO}"
+    fi
+    exit "${codigo}"
+}
+trap limpiar EXIT
+
+# ---------------------------------------------------------------------------
+# 0. Comprobaciones previas
+# ---------------------------------------------------------------------------
+paso "Comprobando el sistema de arranque"
+if (( MODO_UEFI )); then
+    [[ -d /sys/firmware/efi ]] || morir "no estás en modo UEFI. Usa --bios si quieres instalar en modo BIOS."
+    ok "UEFI"
+else
+    ok "BIOS/legacy"
+fi
+
+command -v pacstrap >/dev/null || morir "falta arch-install-scripts"
+command -v sgdisk   >/dev/null || morir "falta gptfdisk"
+
+if (( OFFLINE )); then
+    [[ -d /run/archiso ]] || morir "--offline solo funciona arrancando desde la ISO de AquaOS"
+    [[ -f /usr/share/aquaos/repo/aquaos-local.db.tar.gz ]] \
+        || morir "esta ISO se compiló sin repositorio offline (--no-offline-repo). Instala con conexión o usa otra ISO"
+fi
+
+# No permitir instalar sobre el medio del que estamos arrancando
+MEDIO_LIVE="$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)"
+DISPOSITIVO_LIVE=""
+if [[ -n "${MEDIO_LIVE}" ]]; then
+    DISPOSITIVO_LIVE="$(lsblk -no PKNAME "${MEDIO_LIVE}" 2>/dev/null || true)"
+fi
+
+# ---------------------------------------------------------------------------
+# 1. Elegir disco
+# ---------------------------------------------------------------------------
+paso "Discos disponibles"
+lsblk -d -o NAME,SIZE,MODEL,TYPE | grep -E 'disk|NAME' || true
+echo
+
+if [[ -z "${DISCO}" ]]; then
+    read -rp "Disco destino (ej. /dev/nvme0n1): " DISCO
+fi
+[[ -b "${DISCO}" ]] || morir "${DISCO} no es un dispositivo de bloque"
+
+NOMBRE_DISCO="$(basename "${DISCO}")"
+if [[ -n "${DISPOSITIVO_LIVE}" && "${NOMBRE_DISCO}" == "${DISPOSITIVO_LIVE}" ]]; then
+    morir "ese es el dispositivo desde el que has arrancado el ISO. Elige otro."
+fi
+
+if mount | grep -q "^${DISCO}"; then
+    morir "${DISCO} tiene particiones montadas; desmóntalas antes"
+fi
+
+TAMANO="$(lsblk -dno SIZE "${DISCO}")"
+(( SALTAR_CONFIRMACION )) || {
+    printf '\n%sSe va a BORRAR por completo %s (%s)%s\n' "${ROJO}${NEGRITA}" "${DISCO}" "${TAMANO}" "${RESET}"
+    read -rp "Escribe BORRAR para continuar: " respuesta
+    [[ "${respuesta}" == "BORRAR" ]] || morir "cancelado por el usuario"
+}
+
+# ---------------------------------------------------------------------------
+# 2. Particionar y formatear
+# ---------------------------------------------------------------------------
+paso "Particionando ${DISCO}"
+wipefs -af "${DISCO}"
+sgdisk --zap-all "${DISCO}"
+
+if (( MODO_UEFI )); then
+    sgdisk -n 1:0:+1G   -t 1:ef00 -c 1:"AQUAOS_ESP"  "${DISCO}"
+    sgdisk -n 2:0:0     -t 2:8300 -c 2:"AQUAOS_ROOT" "${DISCO}"
+else
+    sgdisk -n 1:0:+1M   -t 1:ef02 -c 1:"AQUAOS_BIOS" "${DISCO}"
+    sgdisk -n 2:0:0     -t 2:8300 -c 2:"AQUAOS_ROOT" "${DISCO}"
+fi
+partprobe "${DISCO}"
+udevadm settle
+
+if [[ "${DISCO}" =~ nvme|mmcblk ]]; then
+    P1="${DISCO}p1"; P2="${DISCO}p2"
+else
+    P1="${DISCO}1"; P2="${DISCO}2"
+fi
+[[ -b "${P1}" && -b "${P2}" ]] || morir "no encuentro las particiones ${P1} / ${P2}"
+
+paso "Formateando"
+if (( MODO_UEFI )); then
+    mkfs.fat -F32 -n AQUAOS_ESP "${P1}"
+fi
+mkfs.ext4 -F -L AQUAOS_ROOT "${P2}"
+ok "sistemas de archivos creados"
+
+# ---------------------------------------------------------------------------
+# 3. Montar
+# ---------------------------------------------------------------------------
+paso "Montando"
+mount "${P2}" "${PUNTO_MONTAJE}"
+PRIVADO=1
+if (( MODO_UEFI )); then
+    mkdir -p "${PUNTO_MONTAJE}/boot"
+    mount "${P1}" "${PUNTO_MONTAJE}/boot"
+fi
+ok "montado en ${PUNTO_MONTAJE}"
+
+# ---------------------------------------------------------------------------
+# 4. Instalar paquetes
+# ---------------------------------------------------------------------------
+LISTA_PAQUETES="$(sed -e 's/#.*//' -e '/^\s*$/d' /usr/share/aquaos/packages-desktop.txt | tr '\n' ' ')"
+[[ -n "${LISTA_PAQUETES}" ]] || morir "no encuentro /usr/share/aquaos/packages-desktop.txt"
+
+if (( OFFLINE )); then
+    paso "Instalando el sistema (offline, desde el repositorio de la ISO)"
+    REPO="/usr/share/aquaos/repo"
+    CACHE="${PUNTO_MONTAJE}/var/cache/pacman/pkg"
+    cat > /tmp/aquaos-pacman-offline.conf <<EOF
+[options]
+HoldPkg = pacman glibc
+Architecture = auto
+SigLevel = Never
+LocalFileSigLevel = Optional
+CacheDir = ${CACHE}
+
+[aquaos-local]
+Server = file://${REPO}
+EOF
+    pacstrap -C /tmp/aquaos-pacman-offline.conf "${PUNTO_MONTAJE}" ${LISTA_PAQUETES}
+else
+    paso "Instalando el sistema (requiere internet)"
+    if ! curl -fsI --max-time 8 https://archlinux.org >/dev/null 2>&1; then
+        morir "sin conexión. Conecta la red (nmtui) o usa --offline"
+    fi
+    # Cache en el disco de destino (no en la RAM del live) y configuración
+    # basada en la del propio ISO, para respetar espejos y opciones.
+    CACHE="${PUNTO_MONTAJE}/var/cache/pacman/pkg"
+    sed "/^\[options\]/a CacheDir = ${CACHE}" /etc/pacman.conf > /tmp/aquaos-pacman.conf
+    pacstrap -C /tmp/aquaos-pacman.conf "${PUNTO_MONTAJE}" ${LISTA_PAQUETES}
+fi
+
+# Los paquetes descargados ya están instalados: liberamos el espacio.
+if [[ -n "${CACHE:-}" && -d "${CACHE}" ]]; then
+    find "${CACHE}" -mindepth 1 -delete 2>/dev/null || true
+fi
+ok "paquetes instalados"
+
+# ---------------------------------------------------------------------------
+# 5. Copiar la personalización de AquaOS
+# ---------------------------------------------------------------------------
+paso "Copiando la personalización de AquaOS"
+
+copiar() { # copiar <ruta absoluta del sistema live>
+    local ruta="$1"
+    local destino="${PUNTO_MONTAJE}${ruta}"
+    [[ -e "${ruta}" ]] || return 0
+    install -d -m 0755 "$(dirname "${destino}")"
+    rm -rf -- "${destino}"
+    cp -a -- "${ruta}" "${destino}"
+}
+
+copiar /usr/share/aquaos
+# El repositorio offline solo sirve en el medio de instalación: no lo copiamos.
+rm -rf -- "${PUNTO_MONTAJE}/usr/share/aquaos/repo"
+copiar /usr/share/wallpapers/AquaOS
+copiar /etc/skel/.config
+copiar /etc/sddm.conf.d/00-aquaos.conf
+copiar /etc/xdg/autostart/aquaos-desktop-setup.desktop
+copiar /etc/environment.d/50-aquaos.conf
+copiar /etc/systemd/system/aquaos-firstboot.service
+for f in aquaos-firstboot aquaos-desktop-setup aquaos-info aquaos-install; do
+    copiar "/usr/local/bin/${f}"
+done
+
+# Temas de AUR integrados en la ISO (si existen)
+for d in /usr/share/icons/WhiteSur* /usr/share/themes/WhiteSur* /usr/share/aurorae/themes/WhiteSur*; do
+    [[ -e "${d}" ]] || continue
+    install -d -m 0755 "${PUNTO_MONTAJE}$(dirname "${d}")"
+    cp -a "${d}" "${PUNTO_MONTAJE}${d}"
+done
+
+ok "personalización copiada"
+
+# ---------------------------------------------------------------------------
+# 6. Configurar el sistema dentro del chroot
+# ---------------------------------------------------------------------------
+paso "Configurando el sistema"
+
+# Zona horaria: preguntamos, con un valor por defecto razonable
+ZONA_POR_DEFECTO="Europe/Madrid"
+read -rp "Zona horaria [${ZONA_POR_DEFECTO}]: " ZONA
+ZONA="${ZONA:-${ZONA_POR_DEFECTO}}"
+[[ -f "/usr/share/zoneinfo/${ZONA}" ]] || morir "zona horaria desconocida: ${ZONA}"
+
+read -rp "Nombre del equipo [aquaos]: " EQUIPO
+EQUIPO="${EQUIPO:-aquaos}"
+[[ "${EQUIPO}" =~ ^[a-zA-Z0-9][a-zA-Z0-9-]*$ ]] || morir "nombre de equipo inválido"
+
+while true; do
+    read -rsp "Contraseña para ${USUARIO}: " PASS1; echo
+    read -rsp "Repite la contraseña: " PASS2; echo
+    [[ "${PASS1}" == "${PASS2}" ]] || { aviso "no coinciden"; continue; }
+    [[ ${#PASS1} -ge 4 ]] || { aviso "mínimo 4 caracteres"; continue; }
+    [[ "${PASS1}" != *:* ]] || { aviso "la contraseña no puede contener ':'"; continue; }
+    break
+done
+
+read -rp "¿Iniciar sesión automáticamente con ${USUARIO}? [s/N]: " AUTOLOGIN
+AUTOLOGIN="${AUTOLOGIN:-n}"
+
+genfstab -U "${PUNTO_MONTAJE}" >> "${PUNTO_MONTAJE}/etc/fstab"
+
+install -m 0755 /usr/share/aquaos/install/in-chroot.sh "${PUNTO_MONTAJE}/root/aquaos-setup.sh"
+
+arch-chroot "${PUNTO_MONTAJE}" /usr/bin/env \
+    AQUAOS_EQUIPO="${EQUIPO}" \
+    AQUAOS_ZONA="${ZONA}" \
+    AQUAOS_USUARIO="${USUARIO}" \
+    AQUAOS_PASS="${PASS1}" \
+    AQUAOS_SWAP="${CREAR_SWAP}" \
+    AQUAOS_UEFI="${MODO_UEFI}" \
+    AQUAOS_DISCO="${DISCO}" \
+    AQUAOS_AUTOLOGIN="${AUTOLOGIN}" \
+    /root/aquaos-setup.sh
+
+rm -f "${PUNTO_MONTAJE}/root/aquaos-setup.sh"
+ok "sistema configurado"
+
+# ---------------------------------------------------------------------------
+# 7. Terminar
+# ---------------------------------------------------------------------------
+paso "Sincronizando discos"
+sync
+umount -R "${PUNTO_MONTAJE}"
+PRIVADO=0
+
+printf '\n%sAquaOS instalado en %s%s\n' "${VERDE}${NEGRITA}" "${DISCO}" "${RESET}"
+printf '  Retira el USB y reinicia:  reboot\n\n'
