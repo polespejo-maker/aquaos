@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  AquaOS · resumen del sistema (estilo neofetch, sin dependencias)
+# ============================================================================
+set -uo pipefail
+
+C1=$'\033[34m'; C2=$'\033[36m'; C3=$'\033[90m'; B=$'\033[1m'; R=$'\033[0m'
+
+os="$(. /etc/os-release 2>/dev/null && echo "${PRETTY_NAME:-AquaOS}")"
+kernel="$(uname -r)"
+equipo="$(cat /etc/hostname 2>/dev/null || echo aquaos)"
+usuario="$(id -un)"
+sesion="${XDG_SESSION_TYPE:-tty}"
+escritorio="${XDG_CURRENT_DESKTOP:-—}"
+uptime="$(uptime -p 2>/dev/null | sed 's/^up //')"
+cpu="$(awk -F': ' '/model name/ {print $2; exit}' /proc/cpuinfo)"
+ram_total="$(awk '/MemTotal/ {printf "%.1f", $2/1024/1024}' /proc/meminfo)"
+ram_libre="$(awk '/MemAvailable/ {printf "%.1f", $2/1024/1024}' /proc/meminfo)"
+disco="$(df -h --output=used,size / 2>/dev/null | awk 'NR==2 {print $1" / "$2}')"
+paquetes="$(pacman -Q 2>/dev/null | wc -l)"
+
+cat <<EOF
+
+${C1}              ▄▄▄▄▄▄▄▄              ${R}${B}${usuario}@${equipo}${R}
+${C1}          ▄██████████████▄          ${R}${C3}──────────────────────────────${R}
+${C1}        ▄██████████████████▄        ${R}${C2}SO${R}          ${os}
+${C1}       ██████████████████████       ${R}${C2}Kernel${R}      ${kernel}
+${C1}      ████████████████████████      ${R}${C2}Escritorio${R}  ${escritorio} (${sesion})
+${C2}     ██████████████████████████     ${R}${C2}Uptime${R}      ${uptime:-—}
+${C2}     ██████████████████████████     ${R}${C2}Paquetes${R}    ${paquetes}
+${C2}      ████████████████████████      ${R}${C2}CPU${R}         ${cpu}
+${C1}       ██████████████████████       ${R}${C2}RAM${R}         ${ram_libre} / ${ram_total} GiB
+${C1}        ▀██████████████████▀        ${R}${C2}Disco${R}       ${disco}
+${C1}          ▀██████████████▀          ${R}${C3}──────────────────────────────${R}
+${C1}              ▀▀▀▀▀▀▀▀              ${R}${C1}${B}AquaOS${R} ${C3}· Linux con alma de macOS${R}
+
+EOF

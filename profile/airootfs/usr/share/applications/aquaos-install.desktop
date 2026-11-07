@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Instalar AquaOS
+Name[en]=Install AquaOS
+Comment=Instala AquaOS en un disco (se borra el disco que elijas)
+Comment[en]=Install AquaOS to a disk (the chosen disk will be erased)
+Exec=sudo /usr/local/bin/aquaos-install
+Icon=drive-harddisk
+Terminal=true
+Categories=System;Settings;
+Keywords=install;instalar;aquaos;disco;disk;
+OnlyShowIn=KDE;

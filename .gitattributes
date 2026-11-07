@@ -1,0 +1,18 @@
+# Todos los archivos de texto van con LF en el repositorio. El build corre en
+# Linux y un CRLF en un script lo rompe ("/usr/bin/env: bash\r: no such file").
+* text=auto eol=lf
+
+# Windows: estos dos se quedan con CRLF para que PowerShell/cmd los lean bien.
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binarios: que git no los toque.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.iso binary
+*.vdi binary
+*.zip binary
+*.gz binary
+*.zst binary

@@ -1,0 +1,13 @@
+[SddmGreeterTheme]
+Name=AquaOS
+Description=AquaOS login theme
+Author=AquaOS Project
+Copyright=(c) 2026, AquaOS Project
+License=MIT
+Type=sddm-theme
+Version=0.1
+Website=https://example.invalid/aquaos
+MainScript=Main.qml
+ConfigFile=theme.conf
+Theme-Id=aquaos
+Theme-API=2.0

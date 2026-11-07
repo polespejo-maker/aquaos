@@ -1,0 +1,23 @@
+[General]
+AccentColor=10,132,255
+ColorScheme=BreezeLight
+Name=Breeze Light
+font=Inter,10,-1,5,50,0,0,0,0,0
+menuFont=Inter,10,-1,5,50,0,0,0,0,0
+toolBarFont=Inter,9,-1,5,50,0,0,0,0,0
+smallestReadableFont=Inter,8,-1,5,50,0,0,0,0,0
+taskbarFont=Inter,9,-1,5,50,0,0,0,0,0
+fixed=JetBrains Mono,10,-1,5,50,0,0,0,0,0
+activeFont=Inter,10,-1,5,75,0,0,0,0,0
+
+[KDE]
+SingleClick=false
+AnimationDurationFactor=1
+LookAndFeelPackage=org.kde.breeze.desktop
+widgetStyle=Breeze
+
+[Icons]
+Theme=breeze
+
+[Toolbar style]
+ToolButtonStyle=TextBesideIcon

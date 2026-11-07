@@ -1,0 +1,5 @@
+[services][org.kde.konsole.desktop]
+_launch=Ctrl+Alt+T,none,Terminal
+
+[services][org.kde.krunner.desktop]
+_launch=Meta+Space,Alt+Space,Buscar

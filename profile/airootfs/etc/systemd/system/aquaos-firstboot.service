@@ -1,0 +1,16 @@
+[Unit]
+Description=AquaOS: preparación inicial del sistema
+Documentation=file:/usr/share/aquaos/README.md
+After=local-fs.target systemd-sysusers.service
+Before=display-manager.service
+ConditionPathExists=!/var/lib/aquaos/firstboot.done
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/aquaos-firstboot
+RemainAfterExit=yes
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

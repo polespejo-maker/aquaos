@@ -1,0 +1,49 @@
+name: Build ISO
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+
+jobs:
+  iso:
+    name: Compilar AquaOS
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Comprobaciones estáticas
+        run: |
+          docker run --rm -v "$PWD:/work" -w /work archlinux:latest \
+            bash -lc 'pacman -Syu --noconfirm --needed bash shellcheck python nodejs >/dev/null && bash ./scripts/lint.sh'
+
+      - name: Compilar la ISO (contenedor Arch privilegiado)
+        run: |
+          # --no-aur:    en CI preferimos builds reproducibles y rápidos.
+          # --no-offline-repo: evita un artifact de ~4 GB; si lo quieres con
+          #               instalación sin red, quita ese flag.
+          docker run --rm --privileged -v "$PWD:/work" -w /work archlinux:latest \
+            bash -lc 'pacman -Syu --noconfirm --needed archiso git base-devel dosfstools mtools >/dev/null && bash ./build.sh --no-aur --no-offline-repo'
+
+      - name: Trocear la ISO (limite de tamano de los artifacts)
+        run: |
+          mkdir -p dist
+          iso=$(ls out/*.iso | head -n1)
+          # 900 MB por trozo: cada artifact queda muy por debajo del limite.
+          split -b 900M -d -a 2 "$iso" dist/aquaos.iso.part-
+          cp out/SHA256SUMS dist/ || true
+          ls -lh dist
+
+      - name: Publicar la ISO
+        uses: actions/upload-artifact@v4
+        with:
+          name: aquaos-iso
+          retention-days: 7
+          if-no-files-found: error
+          path: dist/*
