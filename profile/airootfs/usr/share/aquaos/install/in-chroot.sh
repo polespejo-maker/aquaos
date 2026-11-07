@@ -151,7 +151,9 @@ if [[ -f /etc/mkinitcpio.conf ]] \
 fi
 
 # --- initramfs ------------------------------------------------------------
-mkinitcpio -P
+if ! mkinitcpio -P; then
+    echo "aviso: mkinitcpio devolvió errores; se continúa (revisa el log)" >&2
+fi
 
 # --- swap ----------------------------------------------------------------
 if [[ "${AQUAOS_SWAP}" == "1" ]]; then

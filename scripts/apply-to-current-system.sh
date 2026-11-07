@@ -88,7 +88,9 @@ if pacman -Qq plymouth >/dev/null 2>&1; then
         fi
     fi
 
-    mkinitcpio -P
+    if ! mkinitcpio -P; then
+        printf '\033[33m aviso\033[0m mkinitcpio devolvió errores; se continúa\n' >&2
+    fi
     if [[ -f /etc/default/grub ]] && command -v grub-mkconfig >/dev/null 2>&1; then
         grub-mkconfig -o /boot/grub/grub.cfg >/dev/null
     fi

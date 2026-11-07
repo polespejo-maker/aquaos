@@ -113,8 +113,12 @@ parted
 
 # --- solo live --------------------------------------------------------------
 mkinitcpio-archiso
+mkinitcpio-nfs-utils
 arch-install-scripts
 squashfs-tools
 syslinux
+nbd
+nfs-utils
+pv
 qemu-guest-agent
 virtualbox-guest-utils

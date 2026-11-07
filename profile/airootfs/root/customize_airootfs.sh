@@ -135,8 +135,12 @@ if [[ -f /etc/mkinitcpio.conf.d/archiso.conf ]] \
         /etc/mkinitcpio.conf.d/archiso.conf
 fi
 
+# mkinitcpio puede devolver error por avisos de hooks PXE (firmware ausente,
+# etc.) aunque la imagen se genere; no debe tumbar la compilación de la ISO.
 if command -v mkinitcpio >/dev/null 2>&1; then
-    mkinitcpio -P
+    if ! mkinitcpio -P; then
+        echo "aviso: mkinitcpio devolvió errores; se continúa (revisa el log)" >&2
+    fi
 fi
 
 echo "==> AquaOS: listo"
